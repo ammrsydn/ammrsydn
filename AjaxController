@@ -1,0 +1,202 @@
+
+    public function EditBookingData(Request $request)
+    {
+        foreach ($request->input() as $k => $v) {
+            $response[$k] = $v;
+        }
+
+        // return response()->json($response);
+
+        $error = array();
+        $userip = $request->ip();
+        $bookingid = Auth::booking()->id;
+        $bookingfullname = Auth::booking()->full_name;
+        $user_id = $request->input('user_id');
+        $fullname = $request->input('fullname');
+        $phonecode = $request->input('phonecode');
+        $phonenumber = $request->input('phonenumber');
+        $date = $request->input('date');
+        $time_start = $request->input('time_start');
+        $duration = $request->input('duration');
+        $court = $request->input('court');
+        $user_status = $request->input('user_status');
+        $pricetype = $request->input('pricetype');
+        $amount = $request->input('amount');
+
+        if ($user_id) {
+            try {
+                $rs = DB::select("select a.id, a.username, a.fullname, a.phonecode, a.phonenumber, a.date, a.time_start, a.duration, a.court, a.pricetype, a.amount, a.referral_by, a.status, a.created_date
+                from Booking a
+                where a.rec_type > 0
+                and a.id = ?", [$user_id]);
+                $numrow = count($rs);
+
+                if ($numrow == 1) {
+                    foreach ($rs as $row) {
+                        $userstatus = $row->status;
+
+                        if ($userstatus != 'Active' && $user_status == 'Active') {
+                            $this->SetLogs($bookingfullname, 'Approved' . $fullname . ' account', $userip);
+                        }
+                    }
+                } else {
+                    $error['user_id'] = 'Invalid Booking ID';
+                }
+            } catch (\Illuminate\Database\QueryException $ex) {
+                $error['user_id'] = 'ERR' . __LINE__; // . ': Service unavailable';
+            }
+        } else {
+            $error['user_id'] = 'Booking ID is required';
+        }
+
+        if ($fullname) {
+            if (strlen($fullname) >= 1 && strlen($fullname) <= 100) { } else {
+                $error['fullname'] = 'Invalid Full Name format';
+            }
+        } else {
+            $error['fullname'] = 'Full Name is required';
+        }
+
+        if ($phonecode) {
+            try {
+                $rs = DB::select("select * 
+                from Country a 
+                where a.rec_type > 0 
+                and a.status = 'Active'
+                and a.phonecode = ?
+                ", [$phonecode]);
+                $numrow = count($rs);
+
+                if ($numrow > 0) { } else {
+                    $error['phonenumber'] = 'Invalid country code';
+                }
+            } catch (\Illuminate\Database\QueryException $ex) {
+                $error['phonenumber'] = 'ERR' . __LINE__; // . ': ' . translateLang('NOSERVICE'); // . $ex->getMessage();
+            }
+        } else {
+            $error['phonenumber'] = 'Country Code is required';
+        }
+
+        if ($phonenumber) {
+            if (strlen($phonenumber) >= 1 && strlen($phonenumber) <= 100) {
+                try {
+                    $rs = DB::select("select * 
+                    from Booking a
+                    where a.rec_type > 0 
+                    and a.phonecode = ?
+                    and a.phonenumber = ?
+                    and a.id <> ?
+                    ", [$phonecode, $phonenumber, $user_id]);
+                    $numrow = count($rs);
+
+                    if ($numrow > 0) {
+                        $error['phonenumber'] = 'Phone Number already exists';
+                    }
+                } catch (\Illuminate\Database\QueryException $ex) {
+                    $error['message'] = 'ERR' . __LINE__; // . ': ' . translateLang('NOSERVICE'); // . $ex->getMessage();
+                }
+            } else {
+                $error['phonenumber'] = 'Invalid Phone Number';
+            }
+        } else {
+            $error['phonenumber'] = 'Phone Number is required';
+        }
+
+        if ($date) {
+            if ($this->DateFormat($date, 'd-m-Y')) {
+                $date = $date;
+            } else {
+                $error['date'] = 'Invalid transaction date';
+            }
+        } else {
+            $date = '01-01-2000';
+        }
+
+        if ($time_start) {
+            if ($this->DateFormat($time_start, 'H:i')) {
+                $time_start = $time_start;
+            } else {
+                $error['time_start'] = 'Invalid transaction time';
+            }
+        } else {
+            $time_start = '12:00 AM';
+        }
+
+        if ($duration) {
+            if (!in_array($duration, ['30', '60', '90', '120', '150', '180'])) {
+                $error['duration'] = 'Invalid duration';
+            }
+        } else {
+            $error['duration'] = 'Duration is required';
+        }
+
+        if ($court) {
+            if (!in_array($court, ['Court 1', 'Court 2', 'Court 3', 'Court 4', 'Court 5', 'Court 6', 'Court 7'])) {
+                $error['court'] = 'Invalid court';
+            }
+        } else {
+            $error['court'] = 'Court is required';
+        }
+
+        if ($user_status) {
+            if (!in_array($user_status, ['Pending', 'Active', 'Approved', 'Rejected', 'Cancelled'])) {
+                $error['user_status'] = 'Invalid status';
+            }
+        } else {
+            $error['user_status'] = 'Status is required';
+        }
+
+        if ($pricetype) {
+            if (!in_array($pricetype, ['Normal', 'Student-Collage', 'Student-Secondary', 'Student-Primary'])) {
+                $error['pricetype'] = 'Invalid price type';
+            }
+        } else {
+            $error['pricetype'] = 'Price type is required';
+        }
+
+        if ($amount) {
+            if (strlen($amount) >= 1 && strlen($amount) <= 100) { } else {
+                $error['amount'] = 'Invalid amount';
+            }
+        } else {
+            $error['amount'] = 'Amount is required';
+        }
+
+        if (empty($error)) {
+            try {
+                $update = DB::update("update Booking
+                set fullname = ?,
+                phonecode = ?,
+                phonenumber = ?,
+                date = ?,
+                time_start = ?,
+                duration = ?,
+                court = ?,
+                status = ?,
+                referral_code = ?,
+                rec_type = rec_type + 1,
+                updated_by = ?,
+                updated_date = NOW(),
+                updated_location = ?
+                where rec_type > 0
+                and id = ?", [$user_id, $fullname, $phonecode, $phonenumber, $phonecode . $phonenumber, $date, $time_start, $duration, $court, $user_status, $userip, $bookingid]);
+
+                if ($update) { } else {
+                    $error['message'] = 'ERR' . __LINE__; // . ': Service unavailable';
+                }
+            } catch (\Illuminate\Database\QueryException $ex) {
+                $error['message'] = 'ERR' . __LINE__; // . ': Service unavailable'; // . $ex->getMessage();
+            }
+        }
+
+        if (empty($error)) {
+            $response['status'] = 'success';
+            $response['message'] = 'Booking updated successfully';
+        } else {
+            $response['status'] = 'error';
+            $response['error'] =  $error;
+            $response['message'] =  isset($error['message']) ? $error['message'] : 'Please check the form';
+        }
+
+        return response()->json($response);
+    }
