@@ -1,0 +1,59 @@
+$(document).on('submit', '#FormEditUser', function(e) {
+	     e.preventDefault();
+
+	     $('.pre-loader').show();
+
+	     var form = $(this);
+	     var _SubmitButton = form.find('button[type="submit"]');
+
+	     form.find('.invalid-feedback').remove();
+	    _SubmitButton.attr('disabled', true);
+
+	     setTimeout(function() {
+	 	 var formData = new FormData(form[0]);
+		 formData.append('additional_field_for_testing', '');
+
+		 $.ajax({
+			headers: {
+				'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+			},
+			url: '/EditBookingData',
+			type: "POST",
+			async: false,
+			data: formData,
+			dataType: 'json',
+			contentType: false,
+			processData: false,
+			cache: false,
+			success: function(data) {
+				console.log(data);
+
+				Swal.fire({
+					icon: data.status,
+					title: data.message
+				});
+
+				if (data.status == 'success') {
+					Pageload();
+				} else {
+					if (data.error) {
+						$.each(data.error, function(k, v) {
+							form.find('#' + k).closest('.form-group').append('<div class="invalid-feedback d-block">' + v + '</div>');
+						});
+					}
+
+					$('.pre-loader').hide();
+				}
+			},
+			error: function(xhr, ajaxOptions, thrownError) {
+				$('.pre-loader').hide();
+				console.log('Error');
+			},
+			complete: function(c) {
+				setTimeout(function() {
+					_SubmitButton.attr('disabled', false);
+				}, 800);
+			}
+		});
+	}, 800);
+});
